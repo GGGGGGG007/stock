@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>추적매수 손익 시뮬레이터</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #eef0e6;
+    --grid-line: rgba(28,35,30,0.06);
+    --panel: #ffffff;
+    --ink: #1c231e;
+    --ink-soft: #656d5e;
+    --line: #d9dbcb;
+    --gain: #c23b3b;
+    --gain-bg: #f8e9e7;
+    --loss: #2f5aa8;
+    --loss-bg: #e8eef7;
+    --gold: #9c7a1e;
+    --gold-bg: #f7eec9;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Public Sans', system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px 28px),
+      var(--bg);
+    padding: 28px 20px 60px;
+    min-height: 100vh;
+  }
+  .mono { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  .shell { max-width: 900px; margin: 0 auto; }
+
+  .hero { margin-bottom: 22px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-soft); background: var(--panel);
+    border: 1px solid var(--line); padding: 4px 10px; border-radius: 3px;
+  }
+  .title {
+    font-size: 30px; font-weight: 800; letter-spacing: -0.02em;
+    margin: 12px 0 6px; line-height: 1.15;
+  }
+  .sub { color: var(--ink-soft); font-size: 14.5px; line-height: 1.55; max-width: 62ch; }
+
+  .chart-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    padding: 18px 18px 10px; margin-top: 18px;
+  }
+  .chart-legend { display: flex; gap: 18px; font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; flex-wrap: wrap; }
+  .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  .chart-svg { width: 100%; height: auto; display: block; }
+
+  .section { margin-top: 30px; }
+  .section-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+  .num {
+    width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--bg);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600; flex: none;
+  }
+  .section-title { font-size: 16.5px; font-weight: 700; }
+  .section-note { font-size: 12px; color: var(--ink-soft); margin: -4px 0 12px 34px; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px; }
+
+  .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .field { background: #fdf6df; border: 1px solid #e8d68a; border-radius: 4px; padding: 8px 10px; }
+  .field label { display: block; font-size: 11px; color: var(--ink-soft); margin-bottom: 4px; }
+  .field .unit-input { display: flex; align-items: baseline; gap: 4px; }
+  .field input {
+    width: 100%; border: none; background: transparent; outline: none;
+    font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; color: var(--ink);
+  }
+  .field input::-webkit-outer-spin-button, .field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .field .unit { font-size: 11px; color: var(--ink-soft); }
+
+  .ledger { display: grid; gap: 0; border-top: 1px solid var(--line); }
+  .ledger-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 7px 2px; border-bottom: 1px dashed var(--line); font-size: 13.5px;
+  }
+  .ledger-row.strong { font-weight: 700; font-size: 14.5px; border-bottom: 1px solid var(--ink); }
+  .ledger-row .lbl { color: var(--ink-soft); }
+  .ledger-row .val { font-family: 'IBM Plex Mono', monospace; }
+  .up { color: var(--gain); } .down { color: var(--loss); }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  table.scn { width: 100%; border-collapse: collapse; min-width: 620px; font-size: 13px; }
+  table.scn th {
+    text-align: right; font-weight: 600; font-size: 11px; color: var(--ink-soft);
+    padding: 10px 10px; border-bottom: 1px solid var(--line); background: #f5f4ec; white-space: nowrap;
+  }
+  table.scn th:first-child, table.scn td:first-child { text-align: left; }
+  table.scn td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; white-space: nowrap; }
+  table.scn tr:last-child td { border-bottom: none; }
+  table.scn tr.best td { background: var(--gold-bg); }
+  table.scn tr.worst td { background: var(--loss-bg); }
+  .pct-input {
+    width: 62px; border: 1px solid #e8d68a; background: #fdf6df; border-radius: 3px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px; padding: 3px 5px; text-align: right;
+  }
+  .row-del {
+    border: none; background: transparent; color: var(--ink-soft); cursor: pointer;
+    padding: 3px 6px; border-radius: 3px; font-size: 13px;
+  }
+  .row-del:hover { background: var(--loss-bg); color: var(--loss); }
+  .stamp {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; font-weight: 700;
+    letter-spacing: 0.06em; padding: 1px 6px; border-radius: 2px; margin-left: 6px;
+  }
+  .stamp.best { background: var(--gold); color: #fff; }
+  .stamp.worst { background: var(--loss); color: #fff; }
+
+  .add-row-btn {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+    font-size: 12.5px; font-weight: 600; color: var(--ink);
+    background: var(--panel); border: 1px dashed var(--line); border-radius: 5px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .add-row-btn:hover { border-color: var(--ink); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .summary-card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+  .summary-card .lbl { font-size: 11.5px; color: var(--ink-soft); margin-bottom: 6px; }
+  .summary-card .val { font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 700; }
+  .summary-card .sub { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-soft); margin-top: 3px; }
+
+  .foot-note {
+    margin-top: 30px; font-size: 11.5px; color: var(--ink-soft); line-height: 1.6;
+    border-top: 1px solid var(--line); padding-top: 14px;
+  }
+
+  @media (max-width: 560px) {
+    .title { font-size: 23px; }
+    body { padding: 20px 12px 48px; }
+    .section-note { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="hero">
+      <span class="eyebrow">추적매수 시나리오 계산기</span>
+      <div class="title">추적매수 손익 시뮬레이터</div>
+      <p class="sub" id="subText"></p>
+
+      <div class="chart-card">
+        <div class="chart-legend">
+          <span><span class="legend-dot" style="background:var(--ink)"></span>매수 → 매도 → 추적매수</span>
+          <span><span class="legend-dot" style="background:var(--gain)"></span>최고 목표가 시나리오</span>
+          <span><span class="legend-dot" style="background:var(--loss)"></span>최저 손절가 시나리오</span>
+        </div>
+        <svg class="chart-svg" id="chartSvg" viewBox="0 0 650 260" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+    </div>
+
+    <!-- 1. 기본 가정 -->
+    <div class="section">
+      <div class="section-head"><span class="num">1</span><span class="section-title">기본 가정</span></div>
+      <div class="section-note">노란 칸은 직접 수정할 수 있어요. 세금(증권거래세)은 반영하지 않은 단순 계산입니다.</div>
+      <div class="panel">
+        <div class="field-grid" style="margin-bottom:0; max-width:220px;">
+          <div class="field">
+            <label>매매 수수료율</label>
+            <div class="unit-input">
+              <input type="number" step="0.001" id="feeRatePct" />
+              <span class="unit">%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. 1차 매매 -->
+    <div class="section">
+      <div class="section-head"><span class="num">2</span><span class="section-title">1차 매매 (최초 매수 → 매도)</span></div>
+      <div class="panel">
+        <div class="field-grid">
+          <div class="field">
+            <label>매수 단가</label>
+            <div class="unit-input"><input type="number" id="buyPrice1" /><span class="unit">원</span></div>
+          </div>
+          <div class="field">
+            <label>매수 수량</label>
+            <div class="unit-input"><input type="number" id="qty1" /><span class="unit">주</span></div>
+          </div>
+          <div class="field">
+            <label>매도 단가</label>
+            <div class="unit-input"><input type="number" id="sellPrice1" /><span class="unit">원</span></div>
+          </div>
+        </div>
+        <div class="ledger" id="ledger1"></div>
+      </div>
+    </div>
+
+    <!-- 3. 추적매수 -->
+    <div class="section">
+      <div class="section-head"><span class="num">3</span><span class="section-title">추적매수 (1차 매도대금으로 최대 수량 매수)</span></div>
+      <div class="panel">
+        <div class="field-grid">
+          <div class="field">
+            <label>추적매수 단가</label>
+            <div class="unit-input"><input type="number" id="chasePrice" /><span class="unit">원</span></div>
+          </div>
+        </div>
+        <div class="ledger" id="ledger2"></div>
+      </div>
+    </div>
+
+    <!-- 4. 목표가 시나리오 -->
+    <div class="section">
+      <div class="section-head"><span class="num">4</span><span class="section-title">목표가 시나리오 비교</span></div>
+      <div class="section-note">목표 수익률(%)만 입력하면 목표가와 손익이 자동 계산돼요.</div>
+      <div class="table-wrap">
+        <table class="scn">
+          <thead>
+            <tr>
+              <th>목표수익률</th><th>목표가</th><th>2차 실현손익</th><th>2차 수익률</th>
+              <th>최종 누적손익</th><th>원금대비 수익률</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="targetBody"></tbody>
+        </table>
+      </div>
+      <button class="add-row-btn" id="addTargetBtn">＋ 목표가 시나리오 추가</button>
+    </div>
+
+    <!-- 5. 손절가 시나리오 -->
+    <div class="section">
+      <div class="section-head"><span class="num">5</span><span class="section-title">손절가 시나리오 비교</span></div>
+      <div class="section-note">손절 수익률(음수 %)을 입력하면 손절가와 손익이 자동 계산돼요.</div>
+      <div class="table-wrap">
+        <table class="scn">
+          <thead>
+            <tr>
+              <th>손절수익률</th><th>손절가</th><th>2차 실현손익</th><th>2차 수익률</th>
+              <th>최종 누적손익</th><th>원금대비 수익률</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="stopBody"></tbody>
+        </table>
+      </div>
+      <button class="add-row-btn" id="addStopBtn">＋ 손절가 시나리오 추가</button>
+    </div>
+
+    <!-- 6. 요약 -->
+    <div class="section">
+      <div class="section-head"><span class="num">6</span><span class="section-title">요약</span></div>
+      <div class="summary-grid" id="summaryGrid"></div>
+    </div>
+
+    <div class="foot-note">
+      모든 계산은 매매 수수료만 반영한 단순 시뮬레이션이며, 증권거래세 등 세금은 포함되지 않았습니다.
+      수수료율, 단가, 수량, 시나리오 값은 자유롭게 수정해서 사용하세요.
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- state ----------
+  let state = {
+    feeRatePct: 0.015,
+    buyPrice1: 10000,
+    qty1: 100,
+    sellPrice1: 11000,
+    chasePrice: 11500,
+    targets: [],
+    stops: [],
+  };
+  let idCounter = 100;
+  const nextId = () => idCounter++;
+
+  state.targets = [3, 5, 8, 10, 13].map((p) => ({ id: nextId(), pct: p }));
+  state.stops = [-3, -5, -7].map((p) => ({ id: nextId(), pct: p }));
+
+  // ---------- helpers ----------
+  const won = (n) => (isFinite(n) ? Math.round(n).toLocaleString("ko-KR") + "원" : "-");
+  const pctFmt = (n) => (isFinite(n) ? (n * 100).toFixed(1) + "%" : "-");
+  const numOf = (v) => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+  const esc = (s) => String(s);
+
+  function calc() {
+    const feeRate = state.feeRatePct / 100;
+    const { buyPrice1, qty1, sellPrice1, chasePrice } = state;
+
+    const buyAmt1 = buyPrice1 * qty1;
+    const buyFee1 = buyAmt1 * feeRate;
+    const buyCost1 = buyAmt1 + buyFee1;
+
+    const sellAmt1 = sellPrice1 * qty1;
+    const sellFee1 = sellAmt1 * feeRate;
+    const sellNet1 = sellAmt1 - sellFee1;
+
+    const pnl1 = sellNet1 - buyCost1;
+    const ret1 = buyCost1 ? pnl1 / buyCost1 : 0;
+
+    const cash = sellNet1;
+    const qty2 = chasePrice > 0 ? Math.floor(cash / (chasePrice * (1 + feeRate))) : 0;
+    const buyAmt2 = chasePrice * qty2;
+    const buyFee2 = buyAmt2 * feeRate;
+    const buyCost2 = buyAmt2 + buyFee2;
+    const remainCash = cash - buyCost2;
+
+    const scenario = (p) => {
+      const price = chasePrice * (1 + p / 100);
+      const sellAmt = price * qty2;
+      const sellFee = sellAmt * feeRate;
+      const pnl2 = sellAmt - sellFee - buyCost2;
+      const ret2 = buyCost2 ? pnl2 / buyCost2 : 0;
+      const totalPnl = pnl1 + pnl2;
+      const totalRet = buyCost1 ? totalPnl / buyCost1 : 0;
+      return { price, sellAmt, sellFee, pnl2, ret2, totalPnl, totalRet };
+    };
+
+    const targetRows = state.targets.slice().sort((a, b) => a.pct - b.pct)
+      .map((t) => ({ ...t, ...scenario(t.pct) }));
+    const stopRows = state.stops.slice().sort((a, b) => b.pct - a.pct)
+      .map((s) => ({ ...s, ...scenario(s.pct) }));
+
+    const bestTarget = targetRows.reduce((best, r) => (!best || r.totalPnl > best.totalPnl ? r : best), null);
+    const worstStop = stopRows.reduce((worst, r) => (!worst || r.totalPnl < worst.totalPnl ? r : worst), null);
+
+    return {
+      feeRate, buyAmt1, buyFee1, buyCost1, sellAmt1, sellFee1, sellNet1, pnl1, ret1,
+      cash, qty2, buyAmt2, buyFee2, buyCost2, remainCash, targetRows, stopRows, bestTarget, worstStop,
+    };
+  }
+
+  // ---------- render ----------
+  function render() {
+    const c = calc();
+
+    document.getElementById("subText").textContent =
+      won(state.buyPrice1) + "에 " + state.qty1 + "주 매수 후 " + won(state.sellPrice1) +
+      "에 매도 → 다음 날 " + won(state.chasePrice) +
+      "까지 오른 걸 보고 추적매수했다면, 목표가와 손절가에 따라 최종 손익이 어떻게 달라지는지 계산합니다.";
+
+    // ledger 1
+    document.getElementById("ledger1").innerHTML = [
+      row("매수 금액", won(c.buyAmt1)),
+      row("매수 수수료", won(c.buyFee1)),
+      row("총 매수원가", won(c.buyCost1)),
+      row("매도 금액", won(c.sellAmt1)),
+      row("매도 수수료", won(c.sellFee1)),
+      row("매도 실수령액", won(c.sellNet1)),
+      row("실현 손익 (수익률)", won(c.pnl1) + " (" + pctFmt(c.ret1) + ")", true, c.pnl1 >= 0),
+    ].join("");
+
+    // ledger 2
+    document.getElementById("ledger2").innerHTML = [
+      row("가용 현금 (1차 매도 실수령액)", won(c.cash)),
+      row("추적매수 최대 수량", c.qty2.toLocaleString("ko-KR") + "주", true),
+      row("추적매수 금액", won(c.buyAmt2)),
+      row("추적매수 수수료", won(c.buyFee2)),
+      row("총 매수원가 (2차)", won(c.buyCost2)),
+      row("잔여 현금", won(c.remainCash)),
+    ].join("");
+
+    // target table
+    document.getElementById("targetBody").innerHTML = c.targetRows.map((r) => {
+      const isBest = c.bestTarget && r.id === c.bestTarget.id;
+      return (
+        '<tr class="' + (isBest ? "best" : "") + '">' +
+        '<td><input class="pct-input" type="number" step="0.5" value="' + r.pct + '" onchange="app.updateTarget(' + r.id + ', this.value)" />%</td>' +
+        "<td>" + won(r.price) + "</td>" +
+        '<td class="' + (r.pnl2 >= 0 ? "up" : "down") + '">' + won(r.pnl2) + "</td>" +
+        '<td class="' + (r.ret2 >= 0 ? "up" : "down") + '">' + pctFmt(r.ret2) + "</td>" +
+        '<td class="' + (r.totalPnl >= 0 ? "up" : "down") + '">' + won(r.totalPnl) +
+          (isBest ? '<span class="stamp best">BEST</span>' : "") + "</td>" +
+        '<td class="' + (r.totalRet >= 0 ? "up" : "down") + '">' + pctFmt(r.totalRet) + "</td>" +
+        '<td><button class="row-del" onclick="app.removeTarget(' + r.id + ')">✕</button></td>' +
+        "</tr>"
+      );
+    }).join("");
+
+    // stop table
+    document.getElementById("stopBody").innerHTML = c.stopRows.map((r) => {
+      const isWorst = c.worstStop && r.id === c.worstStop.id;
+      return (
+        '<tr class="' + (isWorst ? "worst" : "") + '">' +
+        '<td><input class="pct-input" type="number" step="0.5" value="' + r.pct + '" onchange="app.updateStop(' + r.id + ', this.value)" />%</td>' +
+        "<td>" + won(r.price) + "</td>" +
+        '<td class="' + (r.pnl2 >= 0 ? "up" : "down") + '">' + won(r.pnl2) + "</td>" +
+        '<td class="' + (r.ret2 >= 0 ? "up" : "down") + '">' + pctFmt(r.ret2) + "</td>" +
+        '<td class="' + (r.totalPnl >= 0 ? "up" : "down") + '">' + won(r.totalPnl) +
+          (isWorst ? '<span class="stamp worst">WORST</span>' : "") + "</td>" +
+        '<td class="' + (r.totalRet >= 0 ? "up" : "down") + '">' + pctFmt(r.totalRet) + "</td>" +
+        '<td><button class="row-del" onclick="app.removeStop(' + r.id + ')">✕</button></td>' +
+        "</tr>"
+      );
+    }).join("");
+
+    // summary
+    document.getElementById("summaryGrid").innerHTML =
+      card("1차 매매 실현손익", won(c.pnl1), pctFmt(c.ret1), c.pnl1 >= 0 ? "up" : "down") +
+      card("▲ 최고 목표가 시나리오 누적손익", c.bestTarget ? won(c.bestTarget.totalPnl) : "-",
+        c.bestTarget ? ("+" + c.bestTarget.pct + "% · " + pctFmt(c.bestTarget.totalRet)) : "-", "up") +
+      card("▼ 최저 손절가 시나리오 누적손익", c.worstStop ? won(c.worstStop.totalPnl) : "-",
+        c.worstStop ? (c.worstStop.pct + "% · " + pctFmt(c.worstStop.totalRet)) : "-", "down") +
+      card("추적매수 후 잔여 현금", won(c.remainCash), c.qty2.toLocaleString("ko-KR") + "주 매수", "");
+
+    // chart
+    drawChart(c);
+  }
+
+  function row(label, value, strong, positive) {
+    const cls = strong ? "ledger-row strong" : "ledger-row";
+    const valCls = strong && positive !== undefined ? (positive ? "val up" : "val down") : "val";
+    return '<div class="' + cls + '"><span class="lbl">' + label + '</span><span class="' + valCls + '">' + value + "</span></div>";
+  }
+
+  function card(label, val, sub, cls) {
+    return (
+      '<div class="summary-card"><div class="lbl">' + label + '</div>' +
+      '<div class="val ' + (cls || "") + '">' + val + "</div>" +
+      '<div class="sub">' + sub + "</div></div>"
+    );
+  }
+
+  function drawChart(c) {
+    const bestTargetPrice = c.bestTarget ? c.bestTarget.price : state.chasePrice * 1.1;
+    const worstStopPrice = c.worstStop ? c.worstStop.price : state.chasePrice * 0.9;
+
+    const vals = [state.buyPrice1, state.sellPrice1, state.chasePrice, bestTargetPrice, worstStopPrice];
+    const vMin = Math.min(...vals) * 0.985;
+    const vMax = Math.max(...vals) * 1.015;
+    const yScale = (v) => 232 - ((v - vMin) / ((vMax - vMin) || 1)) * 196;
+
+    const P0 = { x: 46, y: yScale(state.buyPrice1) };
+    const P1 = { x: 232, y: yScale(state.sellPrice1) };
+    const P2 = { x: 418, y: yScale(state.chasePrice) };
+    const P3t = { x: 604, y: yScale(bestTargetPrice) };
+    const P3s = { x: 604, y: yScale(worstStopPrice) };
+
+    const pts = [
+      { p: P0, c: "var(--ink)", label: "매수", price: state.buyPrice1 },
+      { p: P1, c: "var(--gain)", label: "매도", price: state.sellPrice1 },
+      { p: P2, c: "var(--gold)", label: "추적매수", price: state.chasePrice },
+    ];
+
+    let svg = "";
+    svg += '<line x1="' + P2.x + '" y1="' + P2.y + '" x2="' + P3t.x + '" y2="' + P3t.y + '" stroke="var(--gain)" stroke-width="2" stroke-dasharray="5 4" />';
+    svg += '<line x1="' + P2.x + '" y1="' + P2.y + '" x2="' + P3s.x + '" y2="' + P3s.y + '" stroke="var(--loss)" stroke-width="2" stroke-dasharray="5 4" />';
+    svg += '<polyline points="' + P0.x + ',' + P0.y + ' ' + P1.x + ',' + P1.y + ' ' + P2.x + ',' + P2.y + '" fill="none" stroke="var(--ink)" stroke-width="2.5" />';
+
+    pts.forEach((pt) => {
+      svg += '<circle cx="' + pt.p.x + '" cy="' + pt.p.y + '" r="5" fill="var(--panel)" stroke="' + pt.c + '" stroke-width="2.5" />';
+      svg += '<text x="' + pt.p.x + '" y="' + (pt.p.y - 12) + '" text-anchor="middle" font-size="10" font-family="IBM Plex Mono, monospace" fill="var(--ink-soft)">' + pt.label + '</text>';
+      svg += '<text x="' + pt.p.x + '" y="' + (pt.p.y + 22) + '" text-anchor="middle" font-size="11" font-weight="700" font-family="IBM Plex Mono, monospace" fill="' + pt.c + '">' + Math.round(pt.price).toLocaleString("ko-KR") + '</text>';
+    });
+
+    svg += '<circle cx="' + P3t.x + '" cy="' + P3t.y + '" r="5" fill="var(--gain)" />';
+    svg += '<text x="' + P3t.x + '" y="' + (P3t.y - 12) + '" text-anchor="end" font-size="10" font-family="IBM Plex Mono, monospace" fill="var(--ink-soft)">최고 목표가</text>';
+    svg += '<text x="' + P3t.x + '" y="' + (P3t.y + 20) + '" text-anchor="end" font-size="11" font-weight="700" font-family="IBM Plex Mono, monospace" fill="var(--gain)">' + Math.round(bestTargetPrice).toLocaleString("ko-KR") + '</text>';
+
+    svg += '<circle cx="' + P3s.x + '" cy="' + P3s.y + '" r="5" fill="var(--loss)" />';
+    svg += '<text x="' + P3s.x + '" y="' + (P3s.y + 22) + '" text-anchor="end" font-size="10" font-family="IBM Plex Mono, monospace" fill="var(--ink-soft)">최저 손절가</text>';
+    svg += '<text x="' + P3s.x + '" y="' + (P3s.y + 36) + '" text-anchor="end" font-size="11" font-weight="700" font-family="IBM Plex Mono, monospace" fill="var(--loss)">' + Math.round(worstStopPrice).toLocaleString("ko-KR") + '</text>';
+
+    document.getElementById("chartSvg").innerHTML = svg;
+  }
+
+  // ---------- public API for inline handlers ----------
+  const app = {
+    updateTarget: (id, v) => { const t = state.targets.find((x) => x.id === id); if (t) t.pct = numOf(v); render(); },
+    removeTarget: (id) => { if (state.targets.length > 1) state.targets = state.targets.filter((x) => x.id !== id); render(); },
+    updateStop: (id, v) => { const s = state.stops.find((x) => x.id === id); if (s) s.pct = numOf(v); render(); },
+    removeStop: (id) => { if (state.stops.length > 1) state.stops = state.stops.filter((x) => x.id !== id); render(); },
+  };
+  window.app = app;
+
+  // ---------- wire up base inputs ----------
+  function bind(id, key, isInt) {
+    const el = document.getElementById(id);
+    el.value = state[key];
+    el.addEventListener("input", () => {
+      state[key] = numOf(el.value);
+      render();
+    });
+  }
+  bind("feeRatePct", "feeRatePct");
+  bind("buyPrice1", "buyPrice1");
+  bind("qty1", "qty1");
+  bind("sellPrice1", "sellPrice1");
+  bind("chasePrice", "chasePrice");
+
+  document.getElementById("addTargetBtn").addEventListener("click", () => {
+    state.targets.push({ id: nextId(), pct: 15 });
+    render();
+  });
+  document.getElementById("addStopBtn").addEventListener("click", () => {
+    state.stops.push({ id: nextId(), pct: -10 });
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
