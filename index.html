@@ -127,6 +127,22 @@
   }
   .add-row-btn:hover { border-color: var(--ink); }
 
+  .baseline-card {
+    background: var(--gold-bg); border: 1px solid #e0cd8f; border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .baseline-card .bl-label { font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+  .baseline-card .bl-value { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 700; }
+  .baseline-card .bl-sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 6px; line-height: 1.5; }
+
+  table.scn td.win-cell { background: var(--gold-bg); font-weight: 700; }
+  .mini-stamp {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; font-weight: 700;
+    letter-spacing: 0.04em; padding: 2px 7px; border-radius: 2px; white-space: nowrap;
+  }
+  .mini-stamp.hold { background: var(--gain); color: #fff; }
+  .mini-stamp.chase { background: var(--gold); color: #fff; }
+
   .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
   .summary-card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
   .summary-card .lbl { font-size: 11.5px; color: var(--ink-soft); margin-bottom: 6px; }
@@ -251,9 +267,35 @@
       <button class="add-row-btn" id="addStopBtn">＋ 손절가 시나리오 추가</button>
     </div>
 
-    <!-- 6. 요약 -->
+    <!-- 6. 3방향 비교 -->
     <div class="section">
-      <div class="section-head"><span class="num">6</span><span class="section-title">요약</span></div>
+      <div class="section-head"><span class="num">6</span><span class="section-title">세 가지 대응 비교: 1차 매도 종료 vs 안 팔고 보유 vs 추적매수</span></div>
+      <div class="section-note">같은 미래 가격에서 "어제 팔지 않고 계속 들고 있었다면"과 "추적매수 후 매도했다면"을 나란히 비교합니다.</div>
+
+      <div class="baseline-card" id="baselineCard"></div>
+
+      <div class="table-wrap" style="margin-top:12px;">
+        <table class="scn">
+          <thead>
+            <tr>
+              <th>시나리오</th><th>도달가</th>
+              <th>안 팔고 보유<br/>(원래 수량)</th><th>수익률</th>
+              <th>추적매수 후 매도<br/>(재매수 수량)</th><th>수익률</th>
+              <th>유리한 쪽</th>
+            </tr>
+          </thead>
+          <tbody id="compareBody"></tbody>
+        </table>
+      </div>
+      <div class="section-note" style="margin:10px 0 0;">
+        "안 팔고 보유"는 1차 매도를 하지 않고 원래 수량을 그대로 들고 있다가 해당 가격에 매도했다고 가정한 값입니다.
+        "추적매수 후 매도"는 1차 매도 후 그 대금으로 재매수한 수량 기준입니다. 두 경우 모두 매도 수수료만 반영했습니다.
+      </div>
+    </div>
+
+    <!-- 7. 요약 -->
+    <div class="section">
+      <div class="section-head"><span class="num">7</span><span class="section-title">요약</span></div>
       <div class="summary-grid" id="summaryGrid"></div>
     </div>
 
@@ -319,7 +361,14 @@
       const ret2 = buyCost2 ? pnl2 / buyCost2 : 0;
       const totalPnl = pnl1 + pnl2;
       const totalRet = buyCost1 ? totalPnl / buyCost1 : 0;
-      return { price, sellAmt, sellFee, pnl2, ret2, totalPnl, totalRet };
+
+      // 1차 매도를 하지 않고 원래 수량(qty1)을 그대로 들고 있다가 같은 가격에 팔았을 경우
+      const holdSellAmt = price * qty1;
+      const holdSellFee = holdSellAmt * feeRate;
+      const holdPnl = holdSellAmt - holdSellFee - buyCost1;
+      const holdRet = buyCost1 ? holdPnl / buyCost1 : 0;
+
+      return { price, sellAmt, sellFee, pnl2, ret2, totalPnl, totalRet, holdPnl, holdRet };
     };
 
     const targetRows = state.targets.slice().sort((a, b) => a.pct - b.pct)
@@ -409,8 +458,38 @@
         c.worstStop ? (c.worstStop.pct + "% · " + pctFmt(c.worstStop.totalRet)) : "-", "down") +
       card("추적매수 후 잔여 현금", won(c.remainCash), c.qty2.toLocaleString("ko-KR") + "주 매수", "");
 
+    // compare chart
+    renderCompare(c);
+
     // chart
     drawChart(c);
+  }
+
+  function renderCompare(c) {
+    document.getElementById("baselineCard").innerHTML =
+      '<div class="bl-label">① 1차 매도 종료 (현재 확정된 상태)</div>' +
+      '<div class="bl-value ' + (c.pnl1 >= 0 ? "up" : "down") + '">' + won(c.pnl1) + ' <span style="font-size:14px;">(' + pctFmt(c.ret1) + ')</span></div>' +
+      '<div class="bl-sub">추적매수 없이 여기서 멈췄을 때 이미 확정된 손익입니다. 지금 보유 주식은 0주, 현금 ' + won(c.cash) + '을 들고 있는 상태예요.</div>';
+
+    const combined = c.targetRows.slice().reverse().concat(c.stopRows);
+
+    document.getElementById("compareBody").innerHTML = combined.map((r) => {
+      const holdWins = r.holdPnl > r.totalPnl;
+      const pctLabel = (r.pct >= 0 ? "+" : "") + r.pct + "%";
+      return (
+        "<tr>" +
+        "<td>" + pctLabel + "</td>" +
+        "<td>" + won(r.price) + "</td>" +
+        '<td class="' + (r.holdPnl >= 0 ? "up" : "down") + (holdWins ? " win-cell" : "") + '">' + won(r.holdPnl) + "</td>" +
+        '<td class="' + (r.holdRet >= 0 ? "up" : "down") + '">' + pctFmt(r.holdRet) + "</td>" +
+        '<td class="' + (r.totalPnl >= 0 ? "up" : "down") + (holdWins ? "" : " win-cell") + '">' + won(r.totalPnl) + "</td>" +
+        '<td class="' + (r.totalRet >= 0 ? "up" : "down") + '">' + pctFmt(r.totalRet) + "</td>" +
+        "<td>" + (holdWins
+          ? '<span class="mini-stamp hold">보유 유지</span>'
+          : '<span class="mini-stamp chase">추적매수</span>') + "</td>" +
+        "</tr>"
+      );
+    }).join("");
   }
 
   function row(label, value, strong, positive) {
