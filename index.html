@@ -239,7 +239,7 @@
         <table class="scn">
           <thead>
             <tr>
-              <th>목표수익률</th><th>목표가</th><th>2차 실현손익</th><th>2차 수익률</th>
+              <th>목표수익률</th><th>목표가</th><th>매도수량</th><th>매도금액</th><th>2차 실현손익</th><th>2차 수익률</th>
               <th>최종 누적손익</th><th>원금대비 수익률</th><th></th>
             </tr>
           </thead>
@@ -257,7 +257,7 @@
         <table class="scn">
           <thead>
             <tr>
-              <th>손절수익률</th><th>손절가</th><th>2차 실현손익</th><th>2차 수익률</th>
+              <th>손절수익률</th><th>손절가</th><th>매도수량</th><th>매도금액</th><th>2차 실현손익</th><th>2차 수익률</th>
               <th>최종 누적손익</th><th>원금대비 수익률</th><th></th>
             </tr>
           </thead>
@@ -273,6 +273,7 @@
       <div class="section-note">같은 미래 가격에서 "어제 팔지 않고 계속 들고 있었다면"과 "추적매수 후 매도했다면"을 나란히 비교합니다.</div>
 
       <div class="baseline-card" id="baselineCard"></div>
+      <div class="section-note" id="qtyInfo" style="margin:10px 0 0;"></div>
 
       <div class="table-wrap" style="margin-top:12px;">
         <table class="scn">
@@ -422,6 +423,8 @@
         '<tr class="' + (isBest ? "best" : "") + '">' +
         '<td><input class="pct-input" type="number" step="0.5" value="' + r.pct + '" onchange="app.updateTarget(' + r.id + ', this.value)" />%</td>' +
         "<td>" + won(r.price) + "</td>" +
+        "<td>" + c.qty2.toLocaleString("ko-KR") + "주</td>" +
+        "<td>" + won(r.sellAmt) + "</td>" +
         '<td class="' + (r.pnl2 >= 0 ? "up" : "down") + '">' + won(r.pnl2) + "</td>" +
         '<td class="' + (r.ret2 >= 0 ? "up" : "down") + '">' + pctFmt(r.ret2) + "</td>" +
         '<td class="' + (r.totalPnl >= 0 ? "up" : "down") + '">' + won(r.totalPnl) +
@@ -439,6 +442,8 @@
         '<tr class="' + (isWorst ? "worst" : "") + '">' +
         '<td><input class="pct-input" type="number" step="0.5" value="' + r.pct + '" onchange="app.updateStop(' + r.id + ', this.value)" />%</td>' +
         "<td>" + won(r.price) + "</td>" +
+        "<td>" + c.qty2.toLocaleString("ko-KR") + "주</td>" +
+        "<td>" + won(r.sellAmt) + "</td>" +
         '<td class="' + (r.pnl2 >= 0 ? "up" : "down") + '">' + won(r.pnl2) + "</td>" +
         '<td class="' + (r.ret2 >= 0 ? "up" : "down") + '">' + pctFmt(r.ret2) + "</td>" +
         '<td class="' + (r.totalPnl >= 0 ? "up" : "down") + '">' + won(r.totalPnl) +
@@ -471,6 +476,10 @@
       '<div class="bl-value ' + (c.pnl1 >= 0 ? "up" : "down") + '">' + won(c.pnl1) + ' <span style="font-size:14px;">(' + pctFmt(c.ret1) + ')</span></div>' +
       '<div class="bl-sub">추적매수 없이 여기서 멈췄을 때 이미 확정된 손익입니다. 지금 보유 주식은 0주, 현금 ' + won(c.cash) + '을 들고 있는 상태예요.</div>';
 
+    document.getElementById("qtyInfo").innerHTML =
+      "※ 안 팔고 보유 = 원래 수량 <b>" + state.qty1.toLocaleString("ko-KR") + "주</b> 그대로 · " +
+      "추적매수 후 매도 = 재매수 수량 <b>" + c.qty2.toLocaleString("ko-KR") + "주</b> 기준 (도달가 × 수량 − 매도수수료 − 매수원가로 검증 가능)";
+
     const combined = c.targetRows.slice().reverse().concat(c.stopRows);
 
     document.getElementById("compareBody").innerHTML = combined.map((r) => {
@@ -480,9 +489,11 @@
         "<tr>" +
         "<td>" + pctLabel + "</td>" +
         "<td>" + won(r.price) + "</td>" +
-        '<td class="' + (r.holdPnl >= 0 ? "up" : "down") + (holdWins ? " win-cell" : "") + '">' + won(r.holdPnl) + "</td>" +
+        '<td class="' + (r.holdPnl >= 0 ? "up" : "down") + (holdWins ? " win-cell" : "") + '">' + won(r.holdPnl) +
+          '<br/><span style="font-size:10px;color:var(--ink-soft);font-weight:400;">' + state.qty1.toLocaleString("ko-KR") + '주 × ' + won(r.price).replace("원","") + '원</span></td>' +
         '<td class="' + (r.holdRet >= 0 ? "up" : "down") + '">' + pctFmt(r.holdRet) + "</td>" +
-        '<td class="' + (r.totalPnl >= 0 ? "up" : "down") + (holdWins ? "" : " win-cell") + '">' + won(r.totalPnl) + "</td>" +
+        '<td class="' + (r.totalPnl >= 0 ? "up" : "down") + (holdWins ? "" : " win-cell") + '">' + won(r.totalPnl) +
+          '<br/><span style="font-size:10px;color:var(--ink-soft);font-weight:400;">1차 ' + won(c.pnl1) + ' + 2차 ' + won(r.pnl2) + '</span></td>' +
         '<td class="' + (r.totalRet >= 0 ? "up" : "down") + '">' + pctFmt(r.totalRet) + "</td>" +
         "<td>" + (holdWins
           ? '<span class="mini-stamp hold">보유 유지</span>'
